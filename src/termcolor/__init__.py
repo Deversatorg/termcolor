@@ -8,18 +8,22 @@ from termcolor.termcolor import (
     ATTRIBUTES,
     COLORS,
     HIGHLIGHTS,
+    NAMED_RGB,
     RESET,
     can_colorize,
     colored,
     cprint,
+    gradient,
 )
 
 __all__ = [
     "ATTRIBUTES",
     "COLORS",
     "HIGHLIGHTS",
+    "NAMED_RGB",
     "RESET",
     "can_colorize",
     "colored",
     "cprint",
+    "gradient",
 ]

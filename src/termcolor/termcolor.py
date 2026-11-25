@@ -86,10 +86,33 @@ COLORS: dict[str, int] = {
 }
 
 
+NAMED_RGB: dict[str, tuple[int, int, int]] = {
+    # Custom true-colour palette (PizzaWSB theme). Usable as `color`, or with an
+    # "on_" prefix as `on_color`, e.g. colored("x", "pizza_red", "on_mozzarella").
+    "pizza_red": (200, 30, 45),
+    "basil_green": (60, 140, 60),
+    "mozzarella": (250, 245, 230),
+    "crust_brown": (170, 110, 50),
+    "wsb_blue": (0, 70, 140),
+}
+
+
 RESET = "\033[0m"
 
 _RGB_FORE_FMT = "38;2;%d;%d;%d"
 _RGB_BACK_FMT = "48;2;%d;%d;%d"
+
+
+def _named_code(name: str, table: dict[str, int], fmt: str, prefix: str = "") -> str:
+    """Return the SGR code for a basic colour name or a NAMED_RGB entry."""
+    if name in table:
+        return str(table[name])
+    rgb_name = name[len(prefix) :] if prefix and name.startswith(prefix) else None
+    if rgb_name is not None and rgb_name in NAMED_RGB:
+        return fmt % NAMED_RGB[rgb_name]
+    if not prefix and name in NAMED_RGB:
+        return fmt % NAMED_RGB[name]
+    raise KeyError(name)
 
 
 @cache
@@ -182,14 +205,14 @@ def colored(
 
     if color is not None:
         if isinstance(color, str):
-            codes.append(str(COLORS[color]))
+            codes.append(_named_code(color, COLORS, _RGB_FORE_FMT))
         elif isinstance(color, tuple):
             _check_rgb(color)
             codes.append(_RGB_FORE_FMT % color)
 
     if on_color is not None:
         if isinstance(on_color, str):
-            codes.append(str(HIGHLIGHTS[on_color]))
+            codes.append(_named_code(on_color, HIGHLIGHTS, _RGB_BACK_FMT, "on_"))
         elif isinstance(on_color, tuple):
             _check_rgb(on_color)
             codes.append(_RGB_BACK_FMT % on_color)
@@ -216,7 +239,6 @@ def cprint(
 
     It accepts arguments of print function.
     """
-
     print(
         (
             colored(
@@ -230,3 +252,47 @@ def cprint(
         ),
         **kwargs,
     )
+
+
+def _to_rgb(color: str | tuple[int, int, int]) -> tuple[int, int, int]:
+    if isinstance(color, str):
+        if color not in NAMED_RGB:
+            msg = f"Unknown NAMED_RGB colour {color!r}, expected one of {sorted(NAMED_RGB)}"
+            raise ValueError(msg)
+        return NAMED_RGB[color]
+    _check_rgb(color)
+    return color
+
+
+def gradient(
+    text: object,
+    start: str | tuple[int, int, int],
+    end: str | tuple[int, int, int],
+    attrs: Iterable[str] | None = None,
+    *,
+    no_color: bool | None = None,
+    force_color: bool | None = None,
+) -> str:
+    """Colorize text with a linear true-colour gradient from `start` to `end`.
+
+    `start` and `end` are (R, G, B) tuples or names from NAMED_RGB.
+    Whitespace keeps its position but gets no colour code.
+
+    Example:
+        gradient('PizzaWSB', 'pizza_red', 'mozzarella')
+        gradient('Hello', (255, 0, 0), (0, 0, 255), attrs=['bold'])
+    """
+    a, b = _to_rgb(start), _to_rgb(end)
+    result = str(text)
+    if not result or not can_colorize(no_color=no_color, force_color=force_color):
+        return result
+    n = max(len(result) - 1, 1)
+    parts = []
+    for i, ch in enumerate(result):
+        if ch.isspace():
+            parts.append(ch)
+            continue
+        rgb = tuple(round(a[k] + (b[k] - a[k]) * i / n) for k in range(3))
+        parts.append(colored(ch, rgb, attrs=attrs, force_color=True)[: -len(RESET)])
+    return "".join(parts) + RESET
+

@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from termcolor import ATTRIBUTES, COLORS, HIGHLIGHTS, colored, cprint, termcolor
+from termcolor import ATTRIBUTES, COLORS, HIGHLIGHTS, colored, cprint, gradient, termcolor
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:
@@ -398,3 +398,58 @@ def test_invalid_rgb(rgb: tuple[int, ...]) -> None:
         colored("text", color=rgb, force_color=True)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="Expected a tuple of 3 ints in range 0-255"):
         colored("text", on_color=rgb, force_color=True)  # type: ignore[arg-type]
+
+
+# --- custom extension: NAMED_RGB palette and gradient() ---------------------------
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("pizza_red", "\x1b[38;2;200;30;45mtext\x1b[0m"),
+        ("wsb_blue", "\x1b[38;2;0;70;140mtext\x1b[0m"),
+    ],
+)
+def test_named_rgb_color(name: str, expected: str) -> None:
+    assert colored("text", name, force_color=True) == expected
+
+
+def test_named_rgb_on_color() -> None:
+    assert (
+        colored("text", "pizza_red", "on_mozzarella", force_color=True)
+        == "\x1b[38;2;200;30;45;48;2;250;245;230mtext\x1b[0m"
+    )
+
+
+def test_basic_names_still_win() -> None:
+    # A basic colour must keep its classic 16-colour code
+    assert colored("text", "red", "on_red", force_color=True) == "\x1b[31;41mtext\x1b[0m"
+
+
+def test_unknown_name_still_raises() -> None:
+    with pytest.raises(KeyError):
+        colored("text", "no_such_colour", force_color=True)
+    with pytest.raises(KeyError):
+        colored("text", on_color="mozzarella", force_color=True)  # needs "on_" prefix
+
+
+def test_gradient_endpoints() -> None:
+    result = gradient("AB", (255, 0, 0), (0, 0, 255), force_color=True)
+    assert result == "\x1b[38;2;255;0;0mA\x1b[38;2;0;0;255mB\x1b[0m"
+
+
+def test_gradient_named_and_whitespace() -> None:
+    result = gradient("A C", "pizza_red", "mozzarella", force_color=True)
+    assert result.startswith("\x1b[38;2;200;30;45mA ")
+    assert result.endswith("\x1b[38;2;250;245;230mC\x1b[0m")
+
+
+def test_gradient_no_color() -> None:
+    assert gradient("plain", "pizza_red", "wsb_blue", no_color=True) == "plain"
+    assert gradient("", "pizza_red", "wsb_blue", force_color=True) == ""
+
+
+@pytest.mark.parametrize("bad", ["no_such_colour", (256, 0, 0), (1, 2)])
+def test_gradient_invalid(bad: str | tuple[int, ...]) -> None:
+    with pytest.raises(ValueError):
+        gradient("x", bad, (0, 0, 0), force_color=True)  # type: ignore[arg-type]
